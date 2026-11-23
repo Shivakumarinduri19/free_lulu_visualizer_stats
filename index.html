@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dynamic World LULC · Earth Engine Visualizer</title>
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet & Leaflet.draw -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <style>
+    * {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    html,
+    body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #020617;
+    }
+
+    #map {
+      height: 100vh;
+      width: 100vw;
+      z-index: 1;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 9999px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    /* Glassmorphism primitives */
+    .glass-surface {
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .glass-input {
+      background: rgba(2, 6, 23, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #f1f5f9;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-input:focus {
+      background: rgba(2, 6, 23, 0.85);
+      border-color: rgba(52, 211, 153, 0.6);
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.2);
+      outline: none;
+    }
+
+    .glass-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(12px);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-btn:hover {
+      background: rgba(255, 255, 255, 0.11);
+      border-color: rgba(255, 255, 255, 0.18);
+      transform: translateY(-1px);
+    }
+
+    .glass-btn-emerald {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.85), rgba(5, 150, 105, 0.85));
+      border: 1px solid rgba(110, 231, 183, 0.35);
+      box-shadow: 0 4px 18px rgba(16, 185, 129, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(12px);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-btn-emerald:hover {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 1), rgba(5, 150, 105, 1));
+      box-shadow: 0 6px 24px rgba(16, 185, 129, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    /* User Pulse Location Marker */
+    .user-location-marker {
+      width: 16px;
+      height: 16px;
+      background: #38bdf8;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.9);
+      position: relative;
+    }
+
+    .user-location-marker::after {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: -6px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(56, 189, 248, 0.45);
+      animation: pulse-ring 2s infinite ease-out;
+    }
+
+    @keyframes pulse-ring {
+      0% {
+        transform: scale(0.6);
+        opacity: 1;
+      }
+
+      100% {
+        transform: scale(2.4);
+        opacity: 0;
+      }
+    }
+
+    /* Style Leaflet controls to match Glassmorphism */
+    .leaflet-bar {
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
+      border-radius: 14px !important;
+      overflow: hidden !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+      backdrop-filter: blur(20px) !important;
+      -webkit-backdrop-filter: blur(20px) !important;
+      background: rgba(15, 23, 42, 0.7) !important;
+    }
+
+    .leaflet-bar a {
+      background: transparent !important;
+      color: #e2e8f0 !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+      transition: background 0.15s ease;
+    }
+
+    .leaflet-bar a:hover {
+      background: rgba(255, 255, 255, 0.12) !important;
+      color: #ffffff !important;
+    }
+
+    .leaflet-control-layers {
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
+      border-radius: 14px !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+      backdrop-filter: blur(20px) !important;
+      -webkit-backdrop-filter: blur(20px) !important;
+      background: rgba(15, 23, 42, 0.75) !important;
+      color: #f1f5f9 !important;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen overflow-hidden select-none">
+
+  <!-- Full-Screen Map Container -->
+  <div id="map" class="absolute inset-0"></div>
+
+  <!-- FLOATING GLASS HEADER / TOP BAR -->
+  <header
+    class="absolute top-3.5 left-3.5 right-3.5 z-[1000] glass-surface rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-2xl">
+    <!-- Brand / Title -->
+    <div class="flex items-center gap-3">
+      <div id="eeStatusIndicator" class="w-2.5 h-2.5 rounded-full bg-slate-500 transition-colors duration-300"
+        title="Checking GEE connection..."></div>
+      <div>
+        <h1 class="text-sm font-semibold tracking-tight text-white flex items-center gap-2">
+          <span>Dynamic World</span>
+          <span
+            class="text-[10px] font-medium tracking-wide uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">GEE
+            10m LULC</span>
+        </h1>
+        <p id="eeStatusText" class="text-[11px] text-slate-400">Google Earth Engine · Near-Real-Time Land Cover</p>
+      </div>
+    </div>
+
+    <!-- Mode Switcher (Glass Capsule) -->
+    <div class="flex items-center bg-black/35 p-1 rounded-xl border border-white/10 text-xs">
+      <button id="modeSingleBtn"
+        class="px-3 py-1 rounded-lg font-medium bg-emerald-500 text-slate-950 font-semibold shadow-sm transition">
+        Single Year
+      </button>
+      <button id="modeCompareBtn"
+        class="px-3 py-1 rounded-lg font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5">
+        <span>⇄ Split Panel (Compare)</span>
+      </button>
+    </div>
+
+    <!-- Dynamic Actions & Date Controls -->
+    <div class="flex flex-wrap items-center gap-2.5 text-xs">
+      <!-- Locate Me Pill -->
+      <button id="locateBtn" title="Detect your location and analyze land cover"
+        class="glass-btn flex items-center gap-1.5 text-slate-200 text-xs font-medium px-3 py-1.5 rounded-xl shadow-sm">
+        <svg id="locateIcon" class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3" stroke-width="2" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2v3m0 14v3m10-10h-3M5 12H2" />
+        </svg>
+        <span id="locateText">Locate Me</span>
+      </button>
+
+      <!-- Single Year Controls -->
+      <div id="singleControls" class="flex flex-wrap items-center gap-2.5">
+        <div class="flex items-center gap-1.5 glass-card px-2.5 py-1 rounded-xl border border-white/10">
+          <span class="text-[11px] text-slate-400">From</span>
+          <input id="startDate" type="date" value="2025-01-01"
+            class="glass-input rounded-lg px-2 py-0.5 text-xs text-slate-100 focus:outline-none" />
+          <span class="text-[11px] text-slate-400">To</span>
+          <input id="endDate" type="date" value="2025-12-31"
+            class="glass-input rounded-lg px-2 py-0.5 text-xs text-slate-100 focus:outline-none" />
+        </div>
+
+        <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+          <input id="autoRun" type="checkbox" checked class="accent-emerald-500 rounded" />
+          Auto-run
+        </label>
+
+        <button id="analyzeBtn" disabled
+          class="glass-btn-emerald disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-1.5 rounded-xl shadow transition">
+          Analyze AOI
+        </button>
+      </div>
+
+      <!-- Compare Controls (Split Panel) -->
+      <div id="compareControls" class="hidden flex flex-wrap items-center gap-2">
+        <!-- Period A (Left) -->
+        <div class="flex items-center gap-1.5 glass-card px-2.5 py-1 rounded-xl border border-sky-500/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+          <span class="text-[11px] text-sky-300 font-medium">Left:</span>
+          <input id="startDateA" type="date" value="2018-01-01"
+            class="glass-input rounded-md px-1.5 py-0.5 text-xs text-slate-100" />
+          <span class="text-slate-500 text-[10px]">to</span>
+          <input id="endDateA" type="date" value="2018-12-31"
+            class="glass-input rounded-md px-1.5 py-0.5 text-xs text-slate-100" />
+        </div>
+
+        <!-- Period B (Right) -->
+        <div class="flex items-center gap-1.5 glass-card px-2.5 py-1 rounded-xl border border-emerald-500/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          <span class="text-[11px] text-emerald-300 font-medium">Right:</span>
+          <input id="startDateB" type="date" value="2024-01-01"
+            class="glass-input rounded-md px-1.5 py-0.5 text-xs text-slate-100" />
+          <span class="text-slate-500 text-[10px]">to</span>
+          <input id="endDateB" type="date" value="2024-12-31"
+            class="glass-input rounded-md px-1.5 py-0.5 text-xs text-slate-100" />
+        </div>
+
+        <!-- Presets -->
+        <div class="flex items-center gap-1 text-[11px]">
+          <button class="preset-btn px-2 py-1 rounded-lg glass-btn text-slate-300" data-ya="2018" data-yb="2024">'18 vs
+            '24</button>
+          <button class="preset-btn px-2 py-1 rounded-lg glass-btn text-slate-300" data-ya="2019" data-yb="2025">'19 vs
+            '25</button>
+          <button class="preset-btn px-2 py-1 rounded-lg glass-btn text-slate-300" data-ya="2016" data-yb="2024">'16 vs
+            '24</button>
+        </div>
+
+        <button id="compareBtn" disabled
+          class="glass-btn-emerald disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-1.5 rounded-xl shadow transition">
+          Compare Change
+        </button>
+      </div>
+
+      <!-- Toggle Sidebar Button -->
+      <button id="toggleSidebarBtn" title="Toggle Analytics Panel"
+        class="glass-btn flex items-center justify-center w-8 h-8 rounded-xl text-slate-300 hover:text-white">
+        <svg id="sidebarToggleIcon" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor"
+          viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- SPLIT SCREEN DIVIDER (DRAGGABLE GLASS HANDLE) -->
+  <div id="splitDivider" class="hidden absolute inset-y-0 z-[999] flex items-center justify-center select-none"
+    style="left: 50%;">
+    <div
+      class="w-[2px] bg-gradient-to-b from-sky-400 via-white to-emerald-400 h-full shadow-[0_0_16px_rgba(255,255,255,0.9)]">
+    </div>
+    <div id="splitHandle"
+      class="absolute w-10 h-10 rounded-full glass-surface border-2 border-white/60 shadow-[0_0_24px_rgba(0,0,0,0.8)] flex items-center justify-center text-white cursor-ew-resize hover:scale-110 active:scale-95 transition-transform"
+      style="touch-action: none;">
+      <svg class="w-5 h-5 text-emerald-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7l-5 5 5 5M16 7l5 5-5 5" />
+      </svg>
+    </div>
+  </div>
+
+  <!-- FLOATING YEAR BADGES ON MAP -->
+  <div id="splitBadges" class="hidden pointer-events-none">
+    <div
+      class="absolute top-20 left-4 z-[900] glass-surface border-sky-500/40 text-sky-300 font-semibold text-xs px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+      <span id="badgePeriodA">◀ Left: 2018</span>
+    </div>
+    <div
+      class="absolute top-20 right-4 z-[900] glass-surface border-emerald-500/40 text-emerald-300 font-semibold text-xs px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2"
+      id="badgeContainerRight">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span id="badgePeriodB">Right: 2024 ▶</span>
+    </div>
+  </div>
+
+  <!-- LAYER OPACITY FLOATING CONTROL -->
+  <div id="layerControl"
+    class="hidden absolute bottom-5 left-4 z-[1000] glass-surface rounded-2xl px-4 py-3 shadow-2xl text-xs space-y-2">
+    <div class="flex items-center justify-between gap-5">
+      <span class="font-medium text-slate-200">LULC Overlay</span>
+      <label class="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+        <input id="toggleLulc" type="checkbox" checked class="accent-emerald-500 rounded" />
+        Visible
+      </label>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="text-[11px] text-slate-400">Opacity</span>
+      <input id="opacitySlider" type="range" min="0.1" max="1" step="0.05" value="0.75"
+        class="w-28 accent-emerald-500 cursor-pointer" />
+    </div>
+  </div>
+
+  <!-- GLASS LOADING MODAL -->
+  <div id="loader"
+    class="hidden absolute inset-0 z-[1100] bg-black/40 backdrop-blur-sm flex items-center justify-center">
+    <div class="glass-surface rounded-2xl px-6 py-5 flex items-center gap-3.5 shadow-2xl border border-white/15">
+      <svg class="animate-spin h-5 w-5 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none"
+        viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+      </svg>
+      <span id="loaderText" class="text-sm font-medium text-slate-200">Processing Dynamic World data in Earth
+        Engine...</span>
+    </div>
+  </div>
+
+  <!-- FLOATING GLASS SIDEBAR (ANALYTICS DRAWER) -->
+  <aside id="sidebar"
+    class="absolute top-20 right-3.5 bottom-5 w-96 z-[1000] glass-surface rounded-3xl flex flex-col overflow-hidden shadow-2xl transition-all duration-300 ease-in-out">
+    <!-- Sidebar Header -->
+    <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+      <h2 id="sidebarTitle" class="text-xs font-semibold uppercase tracking-wider text-slate-300">AOI Land Cover
+        Statistics</h2>
+      <button id="exportCsvBtn" disabled
+        class="glass-btn disabled:opacity-30 disabled:cursor-not-allowed text-[11px] px-3 py-1 rounded-xl text-slate-200 font-medium transition shadow-sm">
+        Export CSV
+      </button>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+      <!-- Empty / Guide State -->
+      <div id="statusBox"
+        class="glass-card rounded-2xl p-4 text-xs text-slate-400 leading-relaxed border border-white/[0.05]">
+        Draw a polygon or rectangle on the map using the left toolbar (or click <strong class="text-slate-200">"Locate
+          Me"</strong>) to automatically visualize Google Dynamic World LULC and compute area statistics.
+      </div>
+
+      <!-- Single Year Results Panel -->
+      <div id="singleResultsPanel" class="hidden space-y-4">
+        <!-- 3 KPI Cards -->
+        <div class="grid grid-cols-3 gap-2">
+          <div class="glass-card rounded-xl p-2.5">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400">Total Area</div>
+            <div id="kpiArea" class="text-xs font-semibold text-white mt-1">—</div>
+          </div>
+          <div class="glass-card rounded-xl p-2.5">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400">Dominant</div>
+            <div id="kpiDominant" class="text-xs font-semibold text-emerald-400 mt-1 truncate">—</div>
+          </div>
+          <div class="glass-card rounded-xl p-2.5">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400">DW Scenes</div>
+            <div id="kpiScenes" class="text-xs font-semibold text-white mt-1">—</div>
+          </div>
+        </div>
+
+        <!-- Donut Chart -->
+        <div class="glass-card rounded-2xl p-3 border border-white/[0.06]">
+          <canvas id="lulcChart" height="200"></canvas>
+        </div>
+
+        <!-- Breakdown Table -->
+        <div class="glass-card rounded-2xl p-3 border border-white/[0.06] overflow-hidden">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400 text-[11px]">
+                <th class="pb-2 font-medium">Class</th>
+                <th class="pb-2 font-medium text-right">Area (ha)</th>
+                <th class="pb-2 font-medium text-right">Share</th>
+              </tr>
+            </thead>
+            <tbody id="statsTableBody" class="divide-y divide-white/[0.04]"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Compare Results Panel (Change Detection) -->
+      <div id="compareResultsPanel" class="hidden space-y-4">
+        <!-- Executive Insights Card -->
+        <div
+          class="glass-card rounded-2xl p-3.5 space-y-1.5 border border-emerald-500/25 bg-gradient-to-br from-emerald-500/10 to-transparent">
+          <div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            Change Detection Insights
+          </div>
+          <p id="compareSummaryText" class="text-xs text-slate-300 leading-relaxed"></p>
+        </div>
+
+        <!-- 2 Change KPI Cards -->
+        <div class="grid grid-cols-2 gap-2">
+          <div class="glass-card rounded-xl p-2.5 border border-emerald-500/20 bg-emerald-500/[0.03]">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Top Expansion</span>
+              <span class="text-emerald-400 font-bold">▲</span>
+            </div>
+            <div id="kpiGainerName" class="text-xs font-semibold text-white mt-1 truncate">—</div>
+            <div id="kpiGainerDiff" class="text-[11px] font-mono text-emerald-400 mt-0.5">+0.0 ha</div>
+          </div>
+
+          <div class="glass-card rounded-xl p-2.5 border border-rose-500/20 bg-rose-500/[0.03]">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Top Loss</span>
+              <span class="text-rose-400 font-bold">▼</span>
+            </div>
+            <div id="kpiLoserName" class="text-xs font-semibold text-white mt-1 truncate">—</div>
+            <div id="kpiLoserDiff" class="text-[11px] font-mono text-rose-400 mt-0.5">-0.0 ha</div>
+          </div>
+        </div>
+
+        <!-- Comparison Bar Chart -->
+        <div class="glass-card rounded-2xl p-3 border border-white/[0.06]">
+          <div class="text-[11px] font-medium text-slate-300 mb-2 flex items-center justify-between">
+            <span>Class Comparison (ha)</span>
+            <span class="text-[10px] text-slate-500">Horizontal Bars</span>
+          </div>
+          <canvas id="compareChart" height="220"></canvas>
+        </div>
+
+        <!-- Change Breakdown Table -->
+        <div class="glass-card rounded-2xl p-3 border border-white/[0.06] overflow-hidden">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400 text-[11px]">
+                <th class="pb-2 font-medium">Class</th>
+                <th id="thYearA" class="pb-2 font-medium text-right text-sky-400">'18</th>
+                <th id="thYearB" class="pb-2 font-medium text-right text-emerald-400">'24</th>
+                <th class="pb-2 font-medium text-right">Net Δ</th>
+              </tr>
+            </thead>
+            <tbody id="compareTableBody" class="divide-y divide-white/[0.04]"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    const API_BASE = "";
+
+    // Health check on load
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${API_BASE}/api/health`);
+        const data = await res.json();
+        const indicator = document.getElementById("eeStatusIndicator");
+        const statusText = document.getElementById("eeStatusText");
+        if (data.earth_engine_initialized) {
+          indicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]";
+          indicator.title = "Google Earth Engine connected";
+          if (statusText) statusText.textContent = "GEE Connected · 10m Near-Real-Time Land Cover";
+        } else {
+          indicator.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+          indicator.title = `GEE not initialized: ${data.error || 'Check project config'}`;
+          if (statusText) statusText.innerHTML = `GEE Status: <span class="text-amber-400">${data.error || 'GEE_PROJECT not set'}</span>`;
+        }
+      } catch (e) {
+        console.warn("Health check failed:", e);
+      }
+    }
+    checkHealth();
+
+    // Initialize Leaflet Map (Dark Basemap by default)
+    const map = L.map("map", { zoomControl: false }).setView([17.385, 78.4867], 11);
+
+    // Zoom control in bottom right
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+
+    const satellite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { attribution: "Tiles &copy; Esri", maxZoom: 19 }
+    );
+
+    const osmDark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "&copy; OpenStreetMap &copy; CARTO",
+      maxZoom: 19,
+    });
+
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap",
+      maxZoom: 19,
+    });
+
+    satellite.addTo(map);
+    L.control.layers(
+      { "Satellite (Esri)": satellite, "Dark Canvas (CARTO)": osmDark, "OpenStreetMap": osm },
+      null,
+      { position: "bottomright" }
+    ).addTo(map);
+
+    // Create custom panes for split-panel
+    map.createPane("leftPane");
+    map.createPane("rightPane");
+    map.getPane("leftPane").style.zIndex = 450;
+    map.getPane("rightPane").style.zIndex = 450;
+
+    // AOI Layer & Draw Control (top-left)
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+      position: "topleft",
+      edit: { featureGroup: drawnItems },
+      draw: {
+        polygon: {
+          allowIntersection: false,
+          showArea: true,
+          shapeOptions: { color: "#10b981", weight: 2, fillColor: "#10b981", fillOpacity: 0.15 },
+        },
+        rectangle: {
+          shapeOptions: { color: "#10b981", weight: 2, fillColor: "#10b981", fillOpacity: 0.15 },
+        },
+        polyline: false,
+        circle: false,
+        circlemarker: false,
+        marker: false,
+      },
+    });
+    map.addControl(drawControl);
+
+    // Move Leaflet draw control down so it doesn't overlap the floating top bar
+    const drawContainer = drawControl.getContainer();
+    if (drawContainer) {
+      drawContainer.style.marginTop = "70px";
+      drawContainer.style.marginLeft = "14px";
+    }
+
+    // State Variables
+    let currentMode = "single";
+    let currentGeoJson = null;
+    let lulcLayer = null;
+    let splitLeftLayer = null;
+    let splitRightLayer = null;
+    let chartInstance = null;
+    let compareChartInstance = null;
+    let lastSingleResults = null;
+    let lastCompareResults = null;
+    let sidebarOpen = true;
+
+    // DOM Elements
+    const sidebar = document.getElementById("sidebar");
+    const toggleSidebarBtn = document.getElementById("toggleSidebarBtn");
+    const sidebarToggleIcon = document.getElementById("sidebarToggleIcon");
+    const badgeContainerRight = document.getElementById("badgeContainerRight");
+    const modeSingleBtn = document.getElementById("modeSingleBtn");
+    const modeCompareBtn = document.getElementById("modeCompareBtn");
+    const singleControls = document.getElementById("singleControls");
+    const compareControls = document.getElementById("compareControls");
+    const sidebarTitle = document.getElementById("sidebarTitle");
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    const compareBtn = document.getElementById("compareBtn");
+    const exportCsvBtn = document.getElementById("exportCsvBtn");
+    const autoRunCheckbox = document.getElementById("autoRun");
+    const loader = document.getElementById("loader");
+    const loaderText = document.getElementById("loaderText");
+    const statusBox = document.getElementById("statusBox");
+    const singleResultsPanel = document.getElementById("singleResultsPanel");
+    const compareResultsPanel = document.getElementById("compareResultsPanel");
+    const layerControl = document.getElementById("layerControl");
+    const toggleLulc = document.getElementById("toggleLulc");
+    const opacitySlider = document.getElementById("opacitySlider");
+    const splitDivider = document.getElementById("splitDivider");
+    const splitHandle = document.getElementById("splitHandle");
+    const splitBadges = document.getElementById("splitBadges");
+    const badgePeriodA = document.getElementById("badgePeriodA");
+    const badgePeriodB = document.getElementById("badgePeriodB");
+
+    // Toggle Sidebar Drawer
+    toggleSidebarBtn.addEventListener("click", () => {
+      sidebarOpen = !sidebarOpen;
+      if (sidebarOpen) {
+        sidebar.classList.remove("translate-x-[420px]", "opacity-0", "pointer-events-none");
+        sidebarToggleIcon.style.transform = "rotate(0deg)";
+        badgeContainerRight.style.right = "410px";
+      } else {
+        sidebar.classList.add("translate-x-[420px]", "opacity-0", "pointer-events-none");
+        sidebarToggleIcon.style.transform = "rotate(180deg)";
+        badgeContainerRight.style.right = "16px";
+      }
+    });
+
+    // Mode Switching
+    modeSingleBtn.addEventListener("click", () => switchMode("single"));
+    modeCompareBtn.addEventListener("click", () => switchMode("compare"));
+
+    function switchMode(mode) {
+      currentMode = mode;
+      if (mode === "single") {
+        modeSingleBtn.className = "px-3 py-1 rounded-lg font-semibold bg-emerald-500 text-slate-950 shadow-sm transition";
+        modeCompareBtn.className = "px-3 py-1 rounded-lg font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5";
+        singleControls.classList.remove("hidden");
+        compareControls.classList.add("hidden");
+        sidebarTitle.textContent = "AOI Land Cover Statistics";
+
+        if (splitLeftLayer) { map.removeLayer(splitLeftLayer); splitLeftLayer = null; }
+        if (splitRightLayer) { map.removeLayer(splitRightLayer); splitRightLayer = null; }
+        splitDivider.classList.add("hidden");
+        splitBadges.classList.add("hidden");
+
+        compareResultsPanel.classList.add("hidden");
+        if (lastSingleResults) {
+          renderOverlay(lastSingleResults.tile_url);
+          renderSingleStats(lastSingleResults);
+          exportCsvBtn.disabled = false;
+        } else if (currentGeoJson && autoRunCheckbox.checked) {
+          runSingleAnalysis();
+        } else {
+          statusBox.classList.remove("hidden");
+          exportCsvBtn.disabled = true;
+        }
+      } else {
+        modeCompareBtn.className = "px-3 py-1 rounded-lg font-semibold bg-emerald-500 text-slate-950 shadow-sm transition flex items-center gap-1.5";
+        modeSingleBtn.className = "px-3 py-1 rounded-lg font-medium text-slate-400 hover:text-white transition";
+        compareControls.classList.remove("hidden");
+        singleControls.classList.add("hidden");
+        sidebarTitle.textContent = "LULC Change Detection";
+
+        if (lulcLayer) { map.removeLayer(lulcLayer); lulcLayer = null; }
+        singleResultsPanel.classList.add("hidden");
+
+        if (lastCompareResults) {
+          renderCompareLayers(lastCompareResults.period_a.tile_url, lastCompareResults.period_b.tile_url);
+          renderCompareStats(lastCompareResults);
+          exportCsvBtn.disabled = false;
+        } else if (currentGeoJson) {
+          runComparison();
+        } else {
+          statusBox.classList.remove("hidden");
+          statusBox.textContent = "Draw an AOI or click 'Locate Me' to run multi-year split change detection.";
+          exportCsvBtn.disabled = true;
+        }
+      }
+    }
+
+    // Preset Buttons
+    document.querySelectorAll(".preset-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const ya = btn.getAttribute("data-ya");
+        const yb = btn.getAttribute("data-yb");
+        document.getElementById("startDateA").value = `${ya}-01-01`;
+        document.getElementById("endDateA").value = `${ya}-12-31`;
+        document.getElementById("startDateB").value = `${yb}-01-01`;
+        document.getElementById("endDateB").value = `${yb}-12-31`;
+        if (currentGeoJson) runComparison();
+      });
+    });
+
+    // AOI Handlers
+    function setAoi(layer) {
+      drawnItems.clearLayers();
+      drawnItems.addLayer(layer);
+      currentGeoJson = layer.toGeoJSON();
+      analyzeBtn.disabled = false;
+      compareBtn.disabled = false;
+
+      // Auto-open sidebar if closed
+      if (!sidebarOpen) toggleSidebarBtn.click();
+
+      if (currentMode === "single") {
+        if (autoRunCheckbox.checked) runSingleAnalysis();
+      } else {
+        runComparison();
+      }
+    }
+
+    map.on(L.Draw.Event.CREATED, (e) => setAoi(e.layer));
+    map.on(L.Draw.Event.EDITED, (e) => {
+      e.layers.eachLayer((layer) => setAoi(layer));
+    });
+    map.on(L.Draw.Event.DELETED, () => {
+      currentGeoJson = null;
+      analyzeBtn.disabled = true;
+      compareBtn.disabled = true;
+      exportCsvBtn.disabled = true;
+      cleanupLayers();
+      layerControl.classList.add("hidden");
+      singleResultsPanel.classList.add("hidden");
+      compareResultsPanel.classList.add("hidden");
+      statusBox.classList.remove("hidden");
+      statusBox.textContent = "AOI cleared. Draw a new polygon or rectangle to analyze.";
+    });
+
+    function cleanupLayers() {
+      if (lulcLayer) { map.removeLayer(lulcLayer); lulcLayer = null; }
+      if (splitLeftLayer) { map.removeLayer(splitLeftLayer); splitLeftLayer = null; }
+      if (splitRightLayer) { map.removeLayer(splitRightLayer); splitRightLayer = null; }
+      splitDivider.classList.add("hidden");
+      splitBadges.classList.add("hidden");
+    }
+
+    analyzeBtn.addEventListener("click", runSingleAnalysis);
+    compareBtn.addEventListener("click", runComparison);
+
+    // Geolocation Handler
+    const locateBtn = document.getElementById("locateBtn");
+    const locateText = document.getElementById("locateText");
+    let userMarker = null;
+
+    function createAoiAround(lat, lng, radiusKm = 1.0) {
+      const deltaLat = radiusKm / 111.0;
+      const deltaLng = radiusKm / (111.0 * Math.cos((lat * Math.PI) / 180));
+      const bounds = [
+        [lat - deltaLat, lng - deltaLng],
+        [lat + deltaLat, lng + deltaLng],
+      ];
+      const rect = L.rectangle(bounds, {
+        color: "#10b981",
+        weight: 2,
+        fillColor: "#10b981",
+        fillOpacity: 0.15,
+      });
+      setAoi(rect);
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+
+    locateBtn.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser.");
+        return;
+      }
+      locateText.textContent = "Locating...";
+      locateBtn.disabled = true;
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          locateText.textContent = "Locate Me";
+          locateBtn.disabled = false;
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const accuracy = Math.round(pos.coords.accuracy);
+
+          map.flyTo([lat, lng], 14, { duration: 1.2 });
+          if (userMarker) map.removeLayer(userMarker);
+
+          const icon = L.divIcon({
+            className: "user-location-marker",
+            iconSize: [16, 16],
+            iconAnchor: [8, 8],
+          });
+          userMarker = L.marker([lat, lng], { icon }).addTo(map);
+
+          const popup = L.popup({ minWidth: 200, className: "glass-popup" }).setContent(`
+            <div class="text-xs p-1 text-slate-800">
+              <div class="font-bold text-sm text-slate-900 mb-0.5">Your Location</div>
+              <div class="text-[11px] text-slate-500 mb-2.5">Accuracy: ±${accuracy}m (${lat.toFixed(4)}, ${lng.toFixed(4)})</div>
+              <div class="flex gap-1.5">
+                <button id="aoi2kmBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-2 py-1 rounded text-xs transition">
+                  Analyze 2×2 km
+                </button>
+                <button id="aoi5kmBtn" class="bg-slate-800 hover:bg-slate-700 text-white font-medium px-2 py-1 rounded text-xs transition">
+                  Analyze 5×5 km
+                </button>
+              </div>
+            </div>
+          `);
+          userMarker.bindPopup(popup).openPopup();
+
+          setTimeout(() => {
+            const btn2 = document.getElementById("aoi2kmBtn");
+            const btn5 = document.getElementById("aoi5kmBtn");
+            if (btn2) btn2.onclick = () => { createAoiAround(lat, lng, 1.0); userMarker.closePopup(); };
+            if (btn5) btn5.onclick = () => { createAoiAround(lat, lng, 2.5); userMarker.closePopup(); };
+          }, 150);
+
+          createAoiAround(lat, lng, 1.0);
+        },
+        (err) => {
+          locateText.textContent = "Locate Me";
+          locateBtn.disabled = false;
+          let msg = "Could not retrieve your location.";
+          if (err.code === 1) msg = "Location permission denied. Please allow location access in your browser.";
+          else if (err.code === 2) msg = "Location unavailable.";
+          else if (err.code === 3) msg = "Location request timed out.";
+          alert(msg);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      );
+    });
+
+    // Layer Opacity & Visibility
+    toggleLulc.addEventListener("change", () => {
+      const isVisible = toggleLulc.checked;
+      if (currentMode === "single") {
+        if (!lulcLayer) return;
+        if (isVisible) lulcLayer.addTo(map);
+        else map.removeLayer(lulcLayer);
+      } else {
+        if (splitLeftLayer) isVisible ? splitLeftLayer.addTo(map) : map.removeLayer(splitLeftLayer);
+        if (splitRightLayer) isVisible ? splitRightLayer.addTo(map) : map.removeLayer(splitRightLayer);
+        splitDivider.style.display = isVisible ? "flex" : "none";
+        splitBadges.style.display = isVisible ? "block" : "none";
+      }
+    });
+
+    opacitySlider.addEventListener("input", () => {
+      const op = parseFloat(opacitySlider.value);
+      if (lulcLayer) lulcLayer.setOpacity(op);
+      if (splitLeftLayer) splitLeftLayer.setOpacity(op);
+      if (splitRightLayer) splitRightLayer.setOpacity(op);
+    });
+
+    // Split Screen Drag Logic
+    let isDraggingSplit = false;
+
+    function setSplitPercent(pct) {
+      pct = Math.max(0, Math.min(100, pct));
+      splitDivider.style.left = `${pct}%`;
+
+      const leftPane = map.getPane("leftPane");
+      const rightPane = map.getPane("rightPane");
+      if (leftPane) {
+        leftPane.style.clipPath = `polygon(0% 0%, ${pct}% 0%, ${pct}% 100%, 0% 100%)`;
+      }
+      if (rightPane) {
+        rightPane.style.clipPath = `polygon(${pct}% 0%, 100% 0%, 100% 100%, ${pct}% 100%)`;
+      }
+    }
+
+    function onSplitDragStart(e) {
+      isDraggingSplit = true;
+      document.body.style.userSelect = "none";
+    }
+
+    function onSplitDragMove(e) {
+      if (!isDraggingSplit) return;
+      const mapRect = document.getElementById("map").getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const offset = clientX - mapRect.left;
+      const pct = (offset / mapRect.width) * 100;
+      setSplitPercent(pct);
+    }
+
+    function onSplitDragEnd() {
+      if (isDraggingSplit) {
+        isDraggingSplit = false;
+        document.body.style.userSelect = "";
+      }
+    }
+
+    splitHandle.addEventListener("mousedown", onSplitDragStart);
+    splitHandle.addEventListener("touchstart", onSplitDragStart, { passive: true });
+    window.addEventListener("mousemove", onSplitDragMove);
+    window.addEventListener("touchmove", onSplitDragMove, { passive: true });
+    window.addEventListener("mouseup", onSplitDragEnd);
+    window.addEventListener("touchend", onSplitDragEnd);
+
+    // Single Period Analysis
+    async function runSingleAnalysis() {
+      if (!currentGeoJson) return;
+
+      const startDate = document.getElementById("startDate").value;
+      const endDate = document.getElementById("endDate").value;
+
+      loaderText.textContent = "Computing Dynamic World composite & statistics...";
+      loader.classList.remove("hidden");
+      statusBox.classList.add("hidden");
+
+      try {
+        const response = await fetch(`${API_BASE}/api/lulc/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            geometry: currentGeoJson,
+            start_date: startDate,
+            end_date: endDate,
+            scale: 10,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Analysis failed.");
+
+        lastSingleResults = data;
+        renderOverlay(data.tile_url);
+        renderSingleStats(data);
+        exportCsvBtn.disabled = false;
+      } catch (err) {
+        singleResultsPanel.classList.add("hidden");
+        statusBox.classList.remove("hidden");
+        statusBox.innerHTML = `<span class="text-rose-400 font-medium">Error:</span> ${err.message}`;
+      } finally {
+        loader.classList.add("hidden");
+      }
+    }
+
+    function renderOverlay(tileUrl) {
+      cleanupLayers();
+      const opacity = parseFloat(opacitySlider.value);
+      lulcLayer = L.tileLayer(tileUrl, { opacity, maxZoom: 19 });
+      if (toggleLulc.checked) lulcLayer.addTo(map);
+      layerControl.classList.remove("hidden");
+    }
+
+    function renderSingleStats(data) {
+      singleResultsPanel.classList.remove("hidden");
+
+      document.getElementById("kpiArea").textContent =
+        data.total_area_ha >= 1000
+          ? `${data.total_area_km2.toFixed(2)} km²`
+          : `${data.total_area_ha.toLocaleString()} ha`;
+      document.getElementById("kpiDominant").textContent = data.dominant_class || "—";
+      document.getElementById("kpiScenes").textContent = data.scene_count.toLocaleString();
+
+      const tbody = document.getElementById("statsTableBody");
+      tbody.innerHTML = "";
+      data.classes.forEach((cls) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-white/[0.03] transition-colors";
+        tr.innerHTML = `
+          <td class="py-2 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-sm inline-block shrink-0 shadow-sm" style="background:${cls.color}"></span>
+            <span class="text-slate-200">${cls.name}</span>
+          </td>
+          <td class="py-2 text-right font-mono text-slate-300">${cls.area_ha.toLocaleString()}</td>
+          <td class="py-2 text-right font-mono text-slate-100 font-medium">${cls.percentage.toFixed(1)}%</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      const nonZero = data.classes.filter((c) => c.percentage > 0);
+      const ctx = document.getElementById("lulcChart").getContext("2d");
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: "doughnut",
+        data: {
+          labels: nonZero.map((c) => c.name),
+          datasets: [
+            {
+              data: nonZero.map((c) => c.percentage),
+              backgroundColor: nonZero.map((c) => c.color),
+              borderColor: "rgba(15, 23, 42, 0.9)",
+              borderWidth: 2,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#94a3b8", boxWidth: 10, font: { size: 10, family: 'Inter' } },
+            },
+            tooltip: {
+              callbacks: {
+                label: (item) => ` ${item.label}: ${item.raw}%`,
+              },
+            },
+          },
+        },
+      });
+    }
+
+    // Compare Analysis
+    async function runComparison() {
+      if (!currentGeoJson) return;
+
+      const startDateA = document.getElementById("startDateA").value;
+      const endDateA = document.getElementById("endDateA").value;
+      const startDateB = document.getElementById("startDateB").value;
+      const endDateB = document.getElementById("endDateB").value;
+
+      const yearA = startDateA.split("-")[0];
+      const yearB = startDateB.split("-")[0];
+
+      loaderText.textContent = `Comparing Land Cover change (${yearA} vs ${yearB}) in Earth Engine...`;
+      loader.classList.remove("hidden");
+      statusBox.classList.add("hidden");
+
+      try {
+        const response = await fetch(`${API_BASE}/api/lulc/compare`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            geometry: currentGeoJson,
+            start_date_a: startDateA,
+            end_date_a: endDateA,
+            start_date_b: startDateB,
+            end_date_b: endDateB,
+            scale: 20,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Change comparison failed.");
+
+        lastCompareResults = data;
+        renderCompareLayers(data.period_a.tile_url, data.period_b.tile_url);
+        renderCompareStats(data);
+        exportCsvBtn.disabled = false;
+      } catch (err) {
+        compareResultsPanel.classList.add("hidden");
+        statusBox.classList.remove("hidden");
+        statusBox.innerHTML = `<span class="text-rose-400 font-medium">Comparison Error:</span> ${err.message}`;
+      } finally {
+        loader.classList.add("hidden");
+      }
+    }
+
+    function renderCompareLayers(tileUrlA, tileUrlB) {
+      cleanupLayers();
+      const op = parseFloat(opacitySlider.value);
+
+      splitLeftLayer = L.tileLayer(tileUrlA, { pane: "leftPane", opacity: op, maxZoom: 19 });
+      splitRightLayer = L.tileLayer(tileUrlB, { pane: "rightPane", opacity: op, maxZoom: 19 });
+
+      if (toggleLulc.checked) {
+        splitLeftLayer.addTo(map);
+        splitRightLayer.addTo(map);
+      }
+
+      const yearA = document.getElementById("startDateA").value.split("-")[0];
+      const yearB = document.getElementById("startDateB").value.split("-")[0];
+      badgePeriodA.textContent = `◀ Left: ${yearA}`;
+      badgePeriodB.textContent = `Right: ${yearB} ▶`;
+
+      splitDivider.classList.remove("hidden");
+      splitBadges.classList.remove("hidden");
+      layerControl.classList.remove("hidden");
+
+      setSplitPercent(50);
+    }
+
+    function renderCompareStats(data) {
+      compareResultsPanel.classList.remove("hidden");
+
+      const yearA = document.getElementById("startDateA").value.split("-")[0];
+      const yearB = document.getElementById("startDateB").value.split("-")[0];
+
+      document.getElementById("thYearA").textContent = `'${yearA.slice(-2)}`;
+      document.getElementById("thYearB").textContent = `'${yearB.slice(-2)}`;
+
+      document.getElementById("compareSummaryText").textContent = data.summary;
+
+      const tg = data.top_gainer;
+      const tl = data.top_loser;
+      document.getElementById("kpiGainerName").textContent = tg ? tg.name : "None";
+      document.getElementById("kpiGainerDiff").textContent = tg ? `+${tg.diff_ha} ha (+${tg.diff_pct}%)` : "—";
+      document.getElementById("kpiLoserName").textContent = tl ? tl.name : "None";
+      document.getElementById("kpiLoserDiff").textContent = tl ? `${tl.diff_ha} ha (${tl.diff_pct}%)` : "—";
+
+      const tbody = document.getElementById("compareTableBody");
+      tbody.innerHTML = "";
+      data.deltas.forEach((d) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-white/[0.03] transition-colors";
+        const isGain = d.diff_ha > 0;
+        const isLoss = d.diff_ha < 0;
+        const badgeClass = isGain
+          ? "text-emerald-400 font-semibold"
+          : isLoss
+            ? "text-rose-400 font-semibold"
+            : "text-slate-400";
+        const sign = isGain ? "+" : "";
+
+        tr.innerHTML = `
+          <td class="py-2 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-sm inline-block shrink-0 shadow-sm" style="background:${d.color}"></span>
+            <span class="text-slate-200 font-medium">${d.name}</span>
+          </td>
+          <td class="py-2 text-right font-mono text-slate-400">${d.area_ha_a.toLocaleString()}</td>
+          <td class="py-2 text-right font-mono text-slate-300 font-medium">${d.area_ha_b.toLocaleString()}</td>
+          <td class="py-2 text-right font-mono ${badgeClass}">${sign}${d.diff_ha} <span class="text-[10px] text-slate-400 font-normal">(${sign}${d.diff_pct}%)</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      const ctx = document.getElementById("compareChart").getContext("2d");
+      if (compareChartInstance) compareChartInstance.destroy();
+
+      const significantDeltas = data.deltas.filter((d) => d.area_ha_a > 0 || d.area_ha_b > 0);
+
+      compareChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: significantDeltas.map((d) => d.name),
+          datasets: [
+            {
+              label: `${yearA} (ha)`,
+              data: significantDeltas.map((d) => d.area_ha_a),
+              backgroundColor: "rgba(56, 189, 248, 0.8)",
+              borderRadius: 4,
+            },
+            {
+              label: `${yearB} (ha)`,
+              data: significantDeltas.map((d) => d.area_ha_b),
+              backgroundColor: "rgba(16, 185, 129, 0.85)",
+              borderRadius: 4,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          indexAxis: "y",
+          plugins: {
+            legend: {
+              position: "top",
+              labels: { color: "#94a3b8", boxWidth: 10, font: { size: 10, family: 'Inter' } },
+            },
+            tooltip: {
+              callbacks: {
+                afterBody: (items) => {
+                  const idx = items[0].dataIndex;
+                  const item = significantDeltas[idx];
+                  const sign = item.diff_ha > 0 ? "+" : "";
+                  return `Net Change: ${sign}${item.diff_ha} ha (${sign}${item.diff_pct}%)`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: "#64748b", font: { size: 10, family: 'Inter' } },
+              grid: { color: "rgba(255, 255, 255, 0.05)" },
+            },
+            y: {
+              ticks: { color: "#cbd5e1", font: { size: 10, family: 'Inter' } },
+              grid: { display: false },
+            },
+          },
+        },
+      });
+    }
+
+    // Export CSV
+    exportCsvBtn.addEventListener("click", () => {
+      if (currentMode === "single") {
+        if (!lastSingleResults) return;
+        const rows = [
+          ["Class ID", "Class Name", "Area (m2)", "Area (ha)", "Area (km2)", "Percentage (%)"],
+          ...lastSingleResults.classes.map((c) => [
+            c.id, c.name, c.area_m2, c.area_ha, c.area_km2, c.percentage,
+          ]),
+        ];
+        downloadCsv(rows, `dynamic_world_lulc_${lastSingleResults.start_date}_${lastSingleResults.end_date}.csv`);
+      } else {
+        if (!lastCompareResults) return;
+        const yearA = document.getElementById("startDateA").value.split("-")[0];
+        const yearB = document.getElementById("startDateB").value.split("-")[0];
+        const rows = [
+          ["Class ID", "Class Name", `${yearA} Area (ha)`, `${yearB} Area (ha)`, "Net Change (ha)", `${yearA} Share (%)`, `${yearB} Share (%)`, "Net Change (%)"],
+          ...lastCompareResults.deltas.map((d) => [
+            d.id, d.name, d.area_ha_a, d.area_ha_b, d.diff_ha, d.pct_a, d.pct_b, d.diff_pct,
+          ]),
+        ];
+        downloadCsv(rows, `dynamic_world_change_detection_${yearA}_vs_${yearB}.csv`);
+      }
+    });
+
+    function downloadCsv(rows, filename) {
+      const csvContent = rows.map((r) => r.join(",")).join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+
+</html>
