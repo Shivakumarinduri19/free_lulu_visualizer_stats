@@ -1,4 +1,5 @@
 # Dynamic World LULC Visualizer & Change Detection
+credits : google dataset and google earth engine api 
 
 An interactive geospatial web platform for near-real-time 10-meter Land Use and Land Cover (LULC) visualization and multi-temporal change detection, powered by Google Earth Engine (Dynamic World V1) and FastAPI.
 
