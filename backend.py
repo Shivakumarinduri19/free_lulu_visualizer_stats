@@ -1,12 +1,4 @@
-"""
-Automatic Dynamic World LULC Visualizer — FastAPI + Google Earth Engine Backend
-------------------------------------------------------------------------------
-Run locally:
-    pip install fastapi uvicorn earthengine-api pydantic
-    earthengine authenticate
-    export GEE_PROJECT="your-gcp-project-id"   # optional if default project is set
-    uvicorn backend:app --reload --port 8000
-"""
+
 
 import json
 import os
